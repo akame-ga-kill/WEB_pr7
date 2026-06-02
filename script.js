@@ -2,34 +2,78 @@ const list = document.getElementById('todo-list')
 const itemCountSpan = document.getElementById('item-count')
 const uncheckedCountSpan = document.getElementById('unchecked-count')
 
-let todos = [
-  { id: 1, text: 'Вивчити HTML', completed: true },
-  { id: 2, text: 'Вивчити CSS', completed: true },
-  { id: 3, text: 'Вивчити JavaScript', completed: false }
-]
+const DB_URL =
+  'https://todo-74be8-default-rtdb.europe-west1.firebasedatabase.app/todos'
 
-const savedTodos = localStorage.getItem('todos')
+let todos = []
 
-if (savedTodos) {
-  todos = JSON.parse(savedTodos)
+async function addTodo(todo) {
+  const response = await fetch(`${DB_URL}.json`, {
+    method: 'POST',
+    body: JSON.stringify({
+      text: todo.text,
+      completed: todo.completed
+    }),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+
+  const data = await response.json()
+
+  return data.name
 }
 
-function saveTodos() {
-  localStorage.setItem('todos', JSON.stringify(todos))
+async function getTodos() {
+  const response = await fetch(`${DB_URL}.json`)
+  const data = await response.json()
+
+  if (!data) {
+    todos = []
+    return
+  }
+
+  todos = Object.keys(data).map(key => ({
+    id: key,
+    ...data[key]
+  }))
 }
 
-function newTodo() {
+async function deleteTodoFromDB(id) {
+  await fetch(`${DB_URL}/${id}.json`, {
+    method: 'DELETE'
+  })
+}
+
+async function updateTodo(todo) {
+  await fetch(`${DB_URL}/${todo.id}.json`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      completed: todo.completed
+    }),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+}
+
+async function newTodo() {
   const text = prompt('Введіть нову справу')
 
   if (!text) return
 
-  todos.push({
-    id: Date.now(),
+  const todo = {
     text,
     completed: false
+  }
+
+  const id = await addTodo(todo)
+
+  todos.push({
+    ...todo,
+    id
   })
 
-  saveTodos()
   render()
   updateCounter()
 }
@@ -41,7 +85,7 @@ function renderTodo(todo) {
         type="checkbox"
         class="form-check-input me-2"
         ${todo.completed ? 'checked' : ''}
-        onchange="checkTodo(${todo.id})"
+        onchange="checkTodo('${todo.id}')"
       />
 
       <label>
@@ -52,7 +96,7 @@ function renderTodo(todo) {
 
       <button
         class="btn btn-danger btn-sm float-end"
-        onclick="deleteTodo(${todo.id})">
+        onclick="deleteTodo('${todo.id}')">
         delete
       </button>
     </li>
@@ -60,44 +104,43 @@ function renderTodo(todo) {
 }
 
 function render() {
-  const html = todos.map(renderTodo).join('')
-  list.innerHTML = html
+  list.innerHTML = todos.map(renderTodo).join('')
 }
 
 function updateCounter() {
   itemCountSpan.textContent = todos.length
 
-  const unchecked = todos.filter(
-    todo => !todo.completed
-  ).length
-
-  uncheckedCountSpan.textContent = unchecked
+  uncheckedCountSpan.textContent =
+    todos.filter(todo => !todo.completed).length
 }
 
-function deleteTodo(id) {
+async function deleteTodo(id) {
+  await deleteTodoFromDB(id)
+
   todos = todos.filter(todo => todo.id !== id)
 
-  saveTodos()
   render()
   updateCounter()
 }
 
-function checkTodo(id) {
-  todos = todos.map(todo => {
-    if (todo.id === id) {
-      return {
-        ...todo,
-        completed: !todo.completed
-      }
-    }
+async function checkTodo(id) {
+  const todo = todos.find(item => item.id === id)
 
-    return todo
-  })
+  if (!todo) return
 
-  saveTodos()
+  todo.completed = !todo.completed
+
+  await updateTodo(todo)
+
   render()
   updateCounter()
 }
 
-render()
-updateCounter()
+async function init() {
+  await getTodos()
+
+  render()
+  updateCounter()
+}
+
+init()
